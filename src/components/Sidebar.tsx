@@ -1,7 +1,13 @@
-import { memo } from "react";
+import { memo, useRef } from "react";
 import { FilePlus, FolderPlus, Settings } from "lucide-react";
 import { FileTree } from "./FileTree";
 import { Tooltip } from "./ui/tooltip";
+import {
+  SIDEBAR_DEFAULT_WIDTH,
+  SIDEBAR_MAX_WIDTH,
+  SIDEBAR_MIN_WIDTH,
+  useUiStore,
+} from "@/stores/uiStore";
 import type { TreeNode } from "@/lib/tauri";
 
 interface SidebarProps {
@@ -33,8 +39,73 @@ interface SidebarProps {
 
 // memo：编辑器每次按键都会让 App 重渲染，侧边栏（含整棵 FileTree）不应跟着重渲染
 export const Sidebar = memo(function Sidebar(props: SidebarProps) {
+  // 宽度存于 uiStore 并持久化（rem 单位），拖右缘调节，替代原固定 w-64
+  const sidebarWidth = useUiStore((s) => s.sidebarWidth);
+  const asideRef = useRef<HTMLElement>(null);
+
+  // 右缘拖拽调宽。性能关键：拖拽期间完全绕过 React——pointermove 只写
+  // aside + 外层挂载 wrapper 的 style.width（rAF 合帧到每帧一次），避免每条
+  // 指针事件都触发 App 全量重渲染；松手时才把最终宽度写入 store 并持久化
+  const onResizeStart = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.button !== 0) return;
+    // aside 的父节点是 App 中控制显隐的挂载 wrapper（overflow-hidden），宽度必须同步
+    const aside = asideRef.current;
+    const wrapper = aside?.parentElement;
+    if (!aside || !wrapper) return;
+    e.preventDefault();
+    const handle = e.currentTarget;
+    handle.setPointerCapture(e.pointerId); // 指针快速甩出也不丢 move/up 事件
+    const startX = e.clientX;
+    const startWidth = useUiStore.getState().sidebarWidth;
+    // 指针位移按根字号 + body zoom 换算回 rem，缩放状态下边缘仍贴合光标
+    const rootFont = parseFloat(getComputedStyle(document.documentElement).fontSize) || 15;
+    const zoom = 1 + useUiStore.getState().zoomLevel * 0.2;
+    const pxPerRem = rootFont * zoom;
+    const prevUserSelect = document.body.style.userSelect;
+    const prevCursor = document.body.style.cursor;
+    document.body.style.userSelect = "none"; // 拖拽中禁止选中树/编辑器文本
+    // 锁定光标形状：capture 只锁事件不锁光标，快速拖动指针越过编辑器时会闪变成 I-beam
+    document.body.style.cursor = "ew-resize";
+    // 挂载 wrapper 的显隐过渡会拖慢内联改宽，拖拽期间临时禁用
+    wrapper.style.transition = "none";
+
+    let raf = 0;
+    let widthRem = startWidth;
+    const applyWidth = () => {
+      raf = 0;
+      const px = `${widthRem * pxPerRem}px`;
+      aside.style.width = px;
+      wrapper.style.width = px;
+    };
+    const onMove = (ev: PointerEvent) => {
+      widthRem = Math.min(
+        SIDEBAR_MAX_WIDTH,
+        Math.max(SIDEBAR_MIN_WIDTH, startWidth + (ev.clientX - startX) / pxPerRem),
+      );
+      if (!raf) raf = requestAnimationFrame(applyWidth);
+    };
+    const finish = () => {
+      handle.removeEventListener("pointermove", onMove);
+      handle.removeEventListener("pointerup", finish);
+      handle.removeEventListener("pointercancel", finish);
+      if (raf) cancelAnimationFrame(raf);
+      document.body.style.userSelect = prevUserSelect;
+      document.body.style.cursor = prevCursor;
+      wrapper.style.transition = "";
+      // 落 store：触发一次 React 渲染对齐（值与内联样式相同，无视觉跳变）并持久化
+      useUiStore.getState().setSidebarWidth(widthRem);
+    };
+    handle.addEventListener("pointermove", onMove);
+    handle.addEventListener("pointerup", finish);
+    handle.addEventListener("pointercancel", finish);
+  };
+
   return (
-    <aside className="flex h-full w-64 shrink-0 flex-col bg-sidebar select-none">
+    <aside
+      ref={asideRef}
+      className="relative flex h-full shrink-0 select-none flex-col bg-sidebar"
+      style={{ width: `${sidebarWidth}rem` }}
+    >
       {/* 标签过滤指示条：点击标签后仅显示命中笔记，可在此清除过滤 */}
       {props.filterTag && (
         <div className="flex shrink-0 items-center gap-1.5 border-b border-border/50 px-3 py-1.5">
@@ -120,6 +191,16 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
             <Settings size={15} strokeWidth={1.8} />
           </button>
         </Tooltip>
+      </div>
+
+      {/* 右缘拖拽条：拖动调宽，双击恢复默认宽度。hover 显示淡 accent 提示线，
+          拖动中沿用同色不再加深——内容实时跟随已是反馈，实色高亮只会显脏 */}
+      <div
+        className="group absolute inset-y-0 right-0 z-10 flex w-1.5 cursor-ew-resize justify-center"
+        onPointerDown={onResizeStart}
+        onDoubleClick={() => useUiStore.getState().setSidebarWidth(SIDEBAR_DEFAULT_WIDTH)}
+      >
+        <div className="w-px bg-transparent transition-colors group-hover:bg-accent/40" />
       </div>
     </aside>
   );

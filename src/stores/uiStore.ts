@@ -18,6 +18,8 @@ export interface UIState {
   // 面板开关
   focusMode: boolean;
   sidebarVisible: boolean;
+  /** 侧边栏宽度，rem 单位（根字号 15px 基准、随 DPI 等比缩放；16 等价原 w-64） */
+  sidebarWidth: number;
   tabBarVisible: boolean;
   zoomLevel: number;
   settingsOpen: boolean;
@@ -58,15 +60,28 @@ export interface UIState {
   // 动作
   toggleFocusMode: () => void;
   toggleSidebar: () => void;
+  setSidebarWidth: (width: number) => void;
   closeMenu: () => void;
   showCloseDialog: () => Promise<"save" | "discard" | "cancel">;
   showPandocDialog: () => Promise<boolean>;
   openUpdateCheck: () => void;
 }
 
+// 侧边栏宽度常量（rem 单位）与收敛函数。
+// 用 rem 而非 px：根字号 15px 基准并随 DPI 缩放（见 useAppShell），宽度随之等比缩放，与原 w-64 语义一致
+export const SIDEBAR_MIN_WIDTH = 12; // ≈180px @15px 根字号
+export const SIDEBAR_MAX_WIDTH = 32; // ≈480px @15px 根字号
+export const SIDEBAR_DEFAULT_WIDTH = 16; // 等价原固定 w-64
+
+function clampSidebarWidth(width: number): number {
+  if (!Number.isFinite(width) || width <= 0) return SIDEBAR_DEFAULT_WIDTH;
+  return Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, width));
+}
+
 export const useUiStore = create<UIState>()((set, get) => ({
   focusMode: false,
   sidebarVisible: true,
+  sidebarWidth: SIDEBAR_DEFAULT_WIDTH,
   tabBarVisible: false,
   zoomLevel: 0,
   settingsOpen: false,
@@ -101,6 +116,7 @@ export const useUiStore = create<UIState>()((set, get) => ({
 
   toggleFocusMode: () => set((s) => ({ focusMode: !s.focusMode })),
   toggleSidebar: () => set((s) => ({ sidebarVisible: !s.sidebarVisible })),
+  setSidebarWidth: (width) => set({ sidebarWidth: clampSidebarWidth(width) }),
   closeMenu: () => set({ menu: null }),
 
   showCloseDialog: () => {
@@ -157,11 +173,12 @@ export const useUiStore = create<UIState>()((set, get) => ({
 }));
 
 // ---- 布局偏好持久化 ----
-// 侧边栏开关 + 右侧面板开关是用户显式设置的布局偏好，跨会话保留。
+// 侧边栏开关/宽度 + 右侧面板开关是用户显式设置的布局偏好，跨会话保留。
 // 其余状态（对话框、右键菜单、拖拽等）是临时态，每次启动恢复默认。
 export const UI_PREFS_KEY = "notes-ui-prefs";
 const UI_PREFS_FIELDS = [
   "sidebarVisible",
+  "sidebarWidth",
   "outlineOpen",
   "backlinksOpen",
   "tagsOpen",
@@ -173,6 +190,7 @@ type UiPrefs = Pick<UIState, (typeof UI_PREFS_FIELDS)[number]>;
 
 const DEFAULT_UI_PREFS: UiPrefs = {
   sidebarVisible: true,
+  sidebarWidth: SIDEBAR_DEFAULT_WIDTH,
   outlineOpen: false,
   backlinksOpen: false,
   tagsOpen: false,
@@ -187,7 +205,13 @@ function readUiPrefs(): UiPrefs {
     if (raw) {
       const parsed = JSON.parse(raw);
       for (const key of UI_PREFS_FIELDS) {
-        if (typeof parsed[key] === "boolean") prefs[key] = parsed[key];
+        const value = parsed[key];
+        if (key === "sidebarWidth") {
+          // 宽度是数字并收敛到合法区间，防 localStorage 脏数据撑破布局
+          if (typeof value === "number") prefs.sidebarWidth = clampSidebarWidth(value);
+        } else if (typeof value === "boolean") {
+          prefs[key] = value;
+        }
       }
     }
   } catch {
@@ -198,7 +222,7 @@ function readUiPrefs(): UiPrefs {
 
 /** 序列化布局偏好子集（键序固定，用于变化比对 + 落盘） */
 function serializeUiPrefs(s: UiPrefs): string {
-  const o: Record<string, boolean> = {};
+  const o: Record<string, boolean | number> = {};
   for (const key of UI_PREFS_FIELDS) o[key] = s[key];
   return JSON.stringify(o);
 }

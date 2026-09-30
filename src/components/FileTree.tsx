@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import {
   ChevronRight,
   FileText,
@@ -30,7 +30,8 @@ interface FileTreeProps {
   onDropOnDir: (node: TreeNode) => void;
 }
 
-export function FileTree(props: FileTreeProps) {
+// memo：侧边栏拖拽调宽时 Sidebar 每帧重渲染，树数据未变则整棵树跳过 diff
+export const FileTree = memo(function FileTree(props: FileTreeProps) {
   const { nodes, depth = 0 } = props;
   return (
     <div>
@@ -39,7 +40,7 @@ export function FileTree(props: FileTreeProps) {
       ))}
     </div>
   );
-}
+});
 
 function TreeRow({
   node,

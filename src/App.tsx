@@ -112,6 +112,7 @@ export default function App() {
 
   const focusMode = useUiStore((s) => s.focusMode);
   const sidebarVisible = useUiStore((s) => s.sidebarVisible);
+  const sidebarWidth = useUiStore((s) => s.sidebarWidth);
   const tabBarVisible = useUiStore((s) => s.tabBarVisible);
   const zoomLevel = useUiStore((s) => s.zoomLevel);
   const settingsOpen = useUiStore((s) => s.settingsOpen);
@@ -429,10 +430,8 @@ export default function App() {
       <div className="flex flex-1 min-h-0">
       <div
         ref={sidebarRef}
-        className={cn(
-          "h-full shrink-0 overflow-hidden transition-all duration-300 ease-out",
-          (!focusMode && sidebarVisible) ? "w-64" : "w-0"
-        )}
+        className="h-full shrink-0 overflow-hidden transition-all duration-300 ease-out"
+        style={{ width: !focusMode && sidebarVisible ? `${sidebarWidth}rem` : 0 }}
       >
         <Sidebar
           rootChildren={visibleChildren}
