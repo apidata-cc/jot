@@ -119,6 +119,27 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
+      # 取 tag 对象以读取附注消息（git tag -l --format='%(contents)'）
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+          fetch-depth: 1
+
+      # Release 说明取自 tag 附注（git tag -a -m "多行说明" v*）；无附注或手动触发时用兜底文案
+      - name: Extract release notes from tag message
+        id: notes
+        if: github.ref_type == 'tag'
+        run: |
+          BODY="$(git tag -l --format='%(contents)' "${{ github.ref_name }}")"
+          if [ -z "$BODY" ]; then
+            BODY="See the assets to download this version and install."
+          fi
+          {
+            echo 'body<<NOTES_EOF'
+            echo "$BODY"
+            echo 'NOTES_EOF'
+          } >> "$GITHUB_OUTPUT"
+
       - uses: actions/download-artifact@v4
         with:
           pattern: bundles-*
@@ -133,7 +154,7 @@ jobs:
         with:
           tag_name: ${{ github.ref_name }}
           name: "即记 (Jot) ${{ github.ref_name }}"
-          body: "See the assets to download this version and install."
+          body: ${{ steps.notes.outputs.body || 'See the assets to download this version and install.' }}
           draft: true
           prerelease: false
           files: bundles/**/*
