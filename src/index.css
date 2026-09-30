@@ -1053,6 +1053,16 @@ html.focus-mode .editor-body .cm-editor .cm-content {
 .animate-menu-in {
   animation: menu-in 0.15s ease-out;
 }
+
+/* 定位当前文档：目标行闪烁高亮。inset 阴影随 border-radius 裁剪且不参与布局，
+   可叠加在选中/悬停底色之上 */
+@keyframes tree-reveal-flash {
+  from { box-shadow: inset 0 0 0 999px rgba(99, 102, 241, 0.28); }
+  to   { box-shadow: inset 0 0 0 999px rgba(99, 102, 241, 0); }
+}
+.tree-reveal-flash {
+  animation: tree-reveal-flash 1s ease-out;
+}
 .animate-dialog-in {
   animation: dialog-in 0.2s ease-out;
 }

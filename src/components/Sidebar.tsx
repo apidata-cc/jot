@@ -1,7 +1,16 @@
 import { memo, useRef } from "react";
-import { FilePlus, FolderPlus, Settings } from "lucide-react";
+import {
+  ChevronsDownUp,
+  ChevronsUpDown,
+  FilePlus,
+  FolderPlus,
+  LocateFixed,
+  Settings,
+} from "lucide-react";
 import { FileTree } from "./FileTree";
 import { Tooltip } from "./ui/tooltip";
+import { useFileStore } from "@/stores/fileStore";
+import { useTabStore } from "@/stores/tabStore";
 import {
   SIDEBAR_DEFAULT_WIDTH,
   SIDEBAR_MAX_WIDTH,
@@ -42,6 +51,23 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
   // 宽度存于 uiStore 并持久化（rem 单位），拖右缘调节，替代原固定 w-64
   const sidebarWidth = useUiStore((s) => s.sidebarWidth);
   const asideRef = useRef<HTMLElement>(null);
+  // 树滚动容器：定位当前文档时在此范围内查询目标行并滚动
+  const treeRef = useRef<HTMLDivElement>(null);
+  // 当前打开文档的路径；无打开文档时定位按钮置灰
+  const activePath = useTabStore((s) => s.tabs[s.activeTabIdx]?.path ?? null);
+  // 任一目录处于展开态即视为“展开中”：按钮显示“全部折叠”；反之显示“全部展开”
+  let hasExpandedDir = false;
+  const walkDirs = (nodes: TreeNode[]) => {
+    for (const n of nodes) {
+      if (!n.isDir) continue;
+      if (!(props.collapsed[n.path] ?? false)) {
+        hasExpandedDir = true;
+        return;
+      }
+      walkDirs(n.children);
+    }
+  };
+  walkDirs(props.rootChildren);
 
   // 右缘拖拽调宽。性能关键：拖拽期间完全绕过 React——pointermove 只写
   // aside + 外层挂载 wrapper 的 style.width（rAF 合帧到每帧一次），避免每条
@@ -100,6 +126,32 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
     handle.addEventListener("pointercancel", finish);
   };
 
+  // 定位当前文档：不动其他目录的折叠状态，仅展开其目录链 → 滚动到行并闪烁高亮
+  // （想要“折叠 + 定位”可先点全部折叠再点这里）。展开引起 React 重渲染，
+  // 双 rAF 等新行挂载后再查询
+  const revealActiveFile = () => {
+    const path = useTabStore.getState().activeTab()?.path;
+    if (!path) return;
+    useFileStore.getState().expandTo(path);
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        const row = treeRef.current?.querySelector<HTMLElement>(
+          `[data-tree-path="${CSS.escape(path)}"]`,
+        );
+        if (!row) return;
+        row.scrollIntoView({ block: "center", behavior: "smooth" });
+        row.classList.remove("tree-reveal-flash");
+        void row.offsetWidth; // 强制 reflow，连续点击时重触发动画
+        row.classList.add("tree-reveal-flash");
+        row.addEventListener(
+          "animationend",
+          () => row.classList.remove("tree-reveal-flash"),
+          { once: true },
+        );
+      }),
+    );
+  };
+
   return (
     <aside
       ref={asideRef}
@@ -124,6 +176,7 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
 
       {/* 目录树 */}
       <div
+        ref={treeRef}
         className="m-1 flex-1 overflow-y-auto rounded pb-4"
         onContextMenu={(e) => {
           e.preventDefault();
@@ -183,6 +236,27 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
           </button>
         </Tooltip>
         <div className="flex-1" />
+        <Tooltip label="定位当前文档">
+          <button
+            className="flex h-7 w-7 items-center justify-center rounded text-secondary transition-colors hover:bg-hover hover:text-foreground disabled:pointer-events-none disabled:opacity-40"
+            disabled={!activePath}
+            onClick={revealActiveFile}
+          >
+            <LocateFixed size={15} strokeWidth={1.8} />
+          </button>
+        </Tooltip>
+        <Tooltip label={hasExpandedDir ? "全部折叠" : "全部展开"}>
+          <button
+            className="flex h-7 w-7 items-center justify-center rounded text-secondary transition-colors hover:bg-hover hover:text-foreground"
+            onClick={() => useFileStore.getState().setAllCollapsed(hasExpandedDir)}
+          >
+            {hasExpandedDir ? (
+              <ChevronsDownUp size={15} strokeWidth={1.8} />
+            ) : (
+              <ChevronsUpDown size={15} strokeWidth={1.8} />
+            )}
+          </button>
+        </Tooltip>
         <Tooltip label="设置">
           <button
             className="flex h-7 w-7 items-center justify-center rounded text-secondary transition-colors hover:bg-hover hover:text-foreground"

@@ -97,6 +97,7 @@ export const useFileStore = create<FileState>()((set, get) => ({
       for (let i = 1; i < parts.length; i++) {
         delete next[parts.slice(0, i).join("/")];
       }
+      persistCollapsed(next);
       return { collapsed: next };
     });
   },
