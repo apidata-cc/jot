@@ -184,7 +184,7 @@ function TreeRow({
             onClick={(e) => e.stopPropagation()}
           />
         ) : (
-          <span className="truncate">{node.name}</span>
+          <span className="truncate" title={node.name}>{node.name}</span>
         )}
         {node.isDir && !isRenaming && (
           <span className="ml-auto hidden shrink-0 items-center gap-0.5 group-hover:flex">

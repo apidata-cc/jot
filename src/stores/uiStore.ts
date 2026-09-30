@@ -20,6 +20,12 @@ export interface UIState {
   sidebarVisible: boolean;
   /** 侧边栏宽度，rem 单位（根字号 15px 基准、随 DPI 等比缩放；16 等价原 w-64） */
   sidebarWidth: number;
+  /** 右侧信息面板宽度，rem 单位（语义同 sidebarWidth，按面板独立记忆） */
+  outlineWidth: number;
+  backlinksWidth: number;
+  tagsWidth: number;
+  todoWidth: number;
+  frontmatterWidth: number;
   tabBarVisible: boolean;
   zoomLevel: number;
   settingsOpen: boolean;
@@ -61,27 +67,64 @@ export interface UIState {
   toggleFocusMode: () => void;
   toggleSidebar: () => void;
   setSidebarWidth: (width: number) => void;
+  setPanelWidth: (panel: PanelWidthKey, width: number) => void;
   closeMenu: () => void;
   showCloseDialog: () => Promise<"save" | "discard" | "cancel">;
   showPandocDialog: () => Promise<boolean>;
   openUpdateCheck: () => void;
 }
 
-// 侧边栏宽度常量（rem 单位）与收敛函数。
+// 侧边栏宽度常量（rem 单位）。
 // 用 rem 而非 px：根字号 15px 基准并随 DPI 缩放（见 useAppShell），宽度随之等比缩放，与原 w-64 语义一致
 export const SIDEBAR_MIN_WIDTH = 12; // ≈180px @15px 根字号
 export const SIDEBAR_MAX_WIDTH = 32; // ≈480px @15px 根字号
 export const SIDEBAR_DEFAULT_WIDTH = 16; // 等价原固定 w-64
 
-function clampSidebarWidth(width: number): number {
-  if (!Number.isFinite(width) || width <= 0) return SIDEBAR_DEFAULT_WIDTH;
-  return Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, width));
+// 右侧信息面板（大纲/反向链接/标签/待办/元数据）共用的宽度范围与默认值（rem）
+export const SIDE_PANEL_MIN_WIDTH = 10; // ≈150px @15px 根字号
+export const SIDE_PANEL_MAX_WIDTH = 40; // ≈600px @15px 根字号
+export const SIDE_PANEL_DEFAULT_WIDTHS = {
+  outlineWidth: 12, // 等价原 w-48
+  backlinksWidth: 13, // 等价原 w-52
+  tagsWidth: 12, // 等价原 w-48
+  todoWidth: 14, // 等价原 w-56
+  frontmatterWidth: 13, // 等价原 w-52
+} as const;
+
+export type PanelWidthKey = keyof typeof SIDE_PANEL_DEFAULT_WIDTHS;
+
+// 各宽度字段的合法区间：localStorage 恢复与 set 动作共用同一收敛
+const WIDTH_FIELD_RANGES: Record<
+  PanelWidthKey | "sidebarWidth",
+  readonly [number, number]
+> = {
+  sidebarWidth: [SIDEBAR_MIN_WIDTH, SIDEBAR_MAX_WIDTH],
+  outlineWidth: [SIDE_PANEL_MIN_WIDTH, SIDE_PANEL_MAX_WIDTH],
+  backlinksWidth: [SIDE_PANEL_MIN_WIDTH, SIDE_PANEL_MAX_WIDTH],
+  tagsWidth: [SIDE_PANEL_MIN_WIDTH, SIDE_PANEL_MAX_WIDTH],
+  todoWidth: [SIDE_PANEL_MIN_WIDTH, SIDE_PANEL_MAX_WIDTH],
+  frontmatterWidth: [SIDE_PANEL_MIN_WIDTH, SIDE_PANEL_MAX_WIDTH],
+};
+
+// 宽度收敛：非法值回落默认宽度，其余钳制到字段区间
+function clampPanelWidth(
+  width: number,
+  field: PanelWidthKey | "sidebarWidth",
+): number {
+  if (!Number.isFinite(width) || width <= 0) {
+    return field === "sidebarWidth"
+      ? SIDEBAR_DEFAULT_WIDTH
+      : SIDE_PANEL_DEFAULT_WIDTHS[field];
+  }
+  const [min, max] = WIDTH_FIELD_RANGES[field];
+  return Math.min(max, Math.max(min, width));
 }
 
 export const useUiStore = create<UIState>()((set, get) => ({
   focusMode: false,
   sidebarVisible: true,
   sidebarWidth: SIDEBAR_DEFAULT_WIDTH,
+  ...SIDE_PANEL_DEFAULT_WIDTHS,
   tabBarVisible: false,
   zoomLevel: 0,
   settingsOpen: false,
@@ -116,7 +159,10 @@ export const useUiStore = create<UIState>()((set, get) => ({
 
   toggleFocusMode: () => set((s) => ({ focusMode: !s.focusMode })),
   toggleSidebar: () => set((s) => ({ sidebarVisible: !s.sidebarVisible })),
-  setSidebarWidth: (width) => set({ sidebarWidth: clampSidebarWidth(width) }),
+  setSidebarWidth: (width) => set({ sidebarWidth: clampPanelWidth(width, "sidebarWidth") }),
+  // computed key 需要断言：panel 是 PanelWidthKey 之一，键值对合法
+  setPanelWidth: (panel, width) =>
+    set({ [panel]: clampPanelWidth(width, panel) } as Partial<UIState>),
   closeMenu: () => set({ menu: null }),
 
   showCloseDialog: () => {
@@ -173,7 +219,7 @@ export const useUiStore = create<UIState>()((set, get) => ({
 }));
 
 // ---- 布局偏好持久化 ----
-// 侧边栏开关/宽度 + 右侧面板开关是用户显式设置的布局偏好，跨会话保留。
+// 侧边栏开关/宽度 + 右侧面板开关/宽度是用户显式设置的布局偏好，跨会话保留。
 // 其余状态（对话框、右键菜单、拖拽等）是临时态，每次启动恢复默认。
 export const UI_PREFS_KEY = "notes-ui-prefs";
 const UI_PREFS_FIELDS = [
@@ -184,6 +230,11 @@ const UI_PREFS_FIELDS = [
   "tagsOpen",
   "frontmatterPanelOpen",
   "todoPanelOpen",
+  "outlineWidth",
+  "backlinksWidth",
+  "tagsWidth",
+  "todoWidth",
+  "frontmatterWidth",
 ] as const;
 
 type UiPrefs = Pick<UIState, (typeof UI_PREFS_FIELDS)[number]>;
@@ -191,6 +242,7 @@ type UiPrefs = Pick<UIState, (typeof UI_PREFS_FIELDS)[number]>;
 const DEFAULT_UI_PREFS: UiPrefs = {
   sidebarVisible: true,
   sidebarWidth: SIDEBAR_DEFAULT_WIDTH,
+  ...SIDE_PANEL_DEFAULT_WIDTHS,
   outlineOpen: false,
   backlinksOpen: false,
   tagsOpen: false,
@@ -200,17 +252,26 @@ const DEFAULT_UI_PREFS: UiPrefs = {
 
 function readUiPrefs(): UiPrefs {
   const prefs: UiPrefs = { ...DEFAULT_UI_PREFS };
+  // union 键在 prefs 上的写入位置类型会被 TS 交叉成 never，用宽索引签名收发
+  const writable = prefs as Record<string, unknown>;
   try {
     const raw = localStorage.getItem(UI_PREFS_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
       for (const key of UI_PREFS_FIELDS) {
         const value = parsed[key];
-        if (key === "sidebarWidth") {
+        const isWidthField =
+          key === "sidebarWidth" || (key as string) in SIDE_PANEL_DEFAULT_WIDTHS;
+        if (isWidthField) {
           // 宽度是数字并收敛到合法区间，防 localStorage 脏数据撑破布局
-          if (typeof value === "number") prefs.sidebarWidth = clampSidebarWidth(value);
+          if (typeof value === "number") {
+            writable[key] = clampPanelWidth(
+              value,
+              key as PanelWidthKey | "sidebarWidth",
+            );
+          }
         } else if (typeof value === "boolean") {
-          prefs[key] = value;
+          writable[key] = value;
         }
       }
     }

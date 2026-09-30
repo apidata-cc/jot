@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { Tags } from "lucide-react";
 import type { TagInfo } from "@/lib/tauri";
+import { ResizablePanel } from "./ResizablePanel";
 
 interface TagPanelProps {
   tags: TagInfo[];
@@ -28,7 +29,7 @@ export function TagPanel({
   const sorted = useMemo(() => sortTags(tags), [tags]);
 
   return (
-    <div className="flex h-full w-48 shrink-0 flex-col border-l border-border bg-sidebar">
+    <ResizablePanel panelKey="tagsWidth">
       <div className="flex h-9 items-center justify-between border-b border-border px-3">
         <span className="text-xs font-medium text-secondary flex items-center gap-1.5">
           <Tags size={13} />
@@ -72,7 +73,7 @@ export function TagPanel({
                 activeTag === t.tag ? onClearTag() : onSelectTag(t.tag)
               }
             >
-              <span className="truncate flex-1">#{t.tag}</span>
+              <span className="truncate flex-1" title={t.tag}>#{t.tag}</span>
               <span
                 className={`ml-2 shrink-0 text-[10px] tabular-nums ${
                   activeTag === t.tag ? "text-accent/70" : "text-secondary/50"
@@ -84,6 +85,6 @@ export function TagPanel({
           ))
         )}
       </div>
-    </div>
+    </ResizablePanel>
   );
 }

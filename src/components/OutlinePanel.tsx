@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { List } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { ResizablePanel } from "./ResizablePanel";
 
 export interface HeadingItem {
   level: number;
@@ -41,7 +42,7 @@ export function OutlinePanel({ doc, activeLine, onJump, onClose }: OutlinePanelP
 
   if (headings.length === 0) {
     return (
-      <div className="flex h-full w-48 shrink-0 flex-col border-l border-border bg-sidebar">
+      <ResizablePanel panelKey="outlineWidth">
         <div className="flex h-9 items-center justify-between border-b border-border px-3">
           <span className="text-xs font-medium text-secondary flex items-center gap-1.5">
             <List size={13} />
@@ -57,7 +58,7 @@ export function OutlinePanel({ doc, activeLine, onJump, onClose }: OutlinePanelP
         <div className="flex flex-1 items-center justify-center">
           <p className="text-xs text-secondary/60">暂无标题</p>
         </div>
-      </div>
+      </ResizablePanel>
     );
   }
 
@@ -71,7 +72,7 @@ export function OutlinePanel({ doc, activeLine, onJump, onClose }: OutlinePanelP
   }
 
   return (
-    <div className="flex h-full w-48 shrink-0 flex-col border-l border-border bg-sidebar">
+    <ResizablePanel panelKey="outlineWidth">
       <div className="flex h-9 items-center justify-between border-b border-border px-3">
         <span className="text-xs font-medium text-secondary flex items-center gap-1.5">
           <List size={13} />
@@ -102,6 +103,6 @@ export function OutlinePanel({ doc, activeLine, onJump, onClose }: OutlinePanelP
           </button>
         ))}
       </div>
-    </div>
+    </ResizablePanel>
   );
 }

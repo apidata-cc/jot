@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { FileText, Plus, Trash2 } from "lucide-react";
 import { load as yamlLoad, dump as yamlDump } from "js-yaml";
+import { ResizablePanel } from "./ResizablePanel";
 
 interface FrontmatterPanelProps {
   doc: string;
@@ -136,7 +137,7 @@ export function FrontmatterPanel({
   );
 
   return (
-    <div className="flex h-full w-52 shrink-0 flex-col border-l border-border bg-sidebar">
+    <ResizablePanel panelKey="frontmatterWidth">
       <div className="flex h-9 items-center justify-between border-b border-border px-3">
         <span className="text-xs font-medium text-secondary flex items-center gap-1.5">
           <FileText size={13} />
@@ -224,6 +225,6 @@ export function FrontmatterPanel({
           </div>
         )}
       </div>
-    </div>
+    </ResizablePanel>
   );
 }

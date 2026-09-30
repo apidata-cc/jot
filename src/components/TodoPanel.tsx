@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { CheckSquare, RefreshCw } from "lucide-react";
 import { api, type SearchMatch } from "@/lib/tauri";
 import { useEditorStore, enqueueWriteFile } from "@/stores/editorStore";
+import { ResizablePanel } from "./ResizablePanel";
 
 interface TodoPanelProps {
   notesDir: string | null;
@@ -155,7 +156,7 @@ export function TodoPanel({
   );
 
   return (
-    <div className="flex h-full w-56 shrink-0 flex-col border-l border-border bg-sidebar">
+    <ResizablePanel panelKey="todoWidth">
       <div className="flex h-9 items-center justify-between border-b border-border px-3">
         <span className="text-xs font-medium text-secondary flex items-center gap-1.5">
           <CheckSquare size={13} />
@@ -242,6 +243,7 @@ export function TodoPanel({
                         ? "text-secondary/50 line-through"
                         : "text-foreground/80"
                     }`}
+                    title={item.text}
                   >
                     {item.text || "（空）"}
                   </span>
@@ -251,6 +253,6 @@ export function TodoPanel({
           ))
         )}
       </div>
-    </div>
+    </ResizablePanel>
   );
 }

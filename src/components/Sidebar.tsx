@@ -11,6 +11,7 @@ import { FileTree } from "./FileTree";
 import { Tooltip } from "./ui/tooltip";
 import { useFileStore } from "@/stores/fileStore";
 import { useTabStore } from "@/stores/tabStore";
+import { startPanelResize } from "@/lib/panelResize";
 import {
   SIDEBAR_DEFAULT_WIDTH,
   SIDEBAR_MAX_WIDTH,
@@ -69,61 +70,20 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
   };
   walkDirs(props.rootChildren);
 
-  // 右缘拖拽调宽。性能关键：拖拽期间完全绕过 React——pointermove 只写
-  // aside + 外层挂载 wrapper 的 style.width（rAF 合帧到每帧一次），避免每条
-  // 指针事件都触发 App 全量重渲染；松手时才把最终宽度写入 store 并持久化
+  // 右缘拖拽调宽。共享实现在 lib/panelResize.ts（绕过 React 直写 DOM + rAF 合帧，
+  // 松手才落 store）。aside 的父节点是 App 中控制显隐的挂载 wrapper
+  // （overflow-hidden），宽度必须同步改
   const onResizeStart = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (e.button !== 0) return;
-    // aside 的父节点是 App 中控制显隐的挂载 wrapper（overflow-hidden），宽度必须同步
     const aside = asideRef.current;
     const wrapper = aside?.parentElement;
     if (!aside || !wrapper) return;
-    e.preventDefault();
-    const handle = e.currentTarget;
-    handle.setPointerCapture(e.pointerId); // 指针快速甩出也不丢 move/up 事件
-    const startX = e.clientX;
-    const startWidth = useUiStore.getState().sidebarWidth;
-    // 指针位移按根字号 + body zoom 换算回 rem，缩放状态下边缘仍贴合光标
-    const rootFont = parseFloat(getComputedStyle(document.documentElement).fontSize) || 15;
-    const zoom = 1 + useUiStore.getState().zoomLevel * 0.2;
-    const pxPerRem = rootFont * zoom;
-    const prevUserSelect = document.body.style.userSelect;
-    const prevCursor = document.body.style.cursor;
-    document.body.style.userSelect = "none"; // 拖拽中禁止选中树/编辑器文本
-    // 锁定光标形状：capture 只锁事件不锁光标，快速拖动指针越过编辑器时会闪变成 I-beam
-    document.body.style.cursor = "ew-resize";
-    // 挂载 wrapper 的显隐过渡会拖慢内联改宽，拖拽期间临时禁用
-    wrapper.style.transition = "none";
-
-    let raf = 0;
-    let widthRem = startWidth;
-    const applyWidth = () => {
-      raf = 0;
-      const px = `${widthRem * pxPerRem}px`;
-      aside.style.width = px;
-      wrapper.style.width = px;
-    };
-    const onMove = (ev: PointerEvent) => {
-      widthRem = Math.min(
-        SIDEBAR_MAX_WIDTH,
-        Math.max(SIDEBAR_MIN_WIDTH, startWidth + (ev.clientX - startX) / pxPerRem),
-      );
-      if (!raf) raf = requestAnimationFrame(applyWidth);
-    };
-    const finish = () => {
-      handle.removeEventListener("pointermove", onMove);
-      handle.removeEventListener("pointerup", finish);
-      handle.removeEventListener("pointercancel", finish);
-      if (raf) cancelAnimationFrame(raf);
-      document.body.style.userSelect = prevUserSelect;
-      document.body.style.cursor = prevCursor;
-      wrapper.style.transition = "";
-      // 落 store：触发一次 React 渲染对齐（值与内联样式相同，无视觉跳变）并持久化
-      useUiStore.getState().setSidebarWidth(widthRem);
-    };
-    handle.addEventListener("pointermove", onMove);
-    handle.addEventListener("pointerup", finish);
-    handle.addEventListener("pointercancel", finish);
+    startPanelResize(e, {
+      targets: [aside, wrapper],
+      dir: 1, // 右缘手柄：向右拖变宽
+      minRem: SIDEBAR_MIN_WIDTH,
+      maxRem: SIDEBAR_MAX_WIDTH,
+      onCommit: (w) => useUiStore.getState().setSidebarWidth(w),
+    });
   };
 
   // 定位当前文档：不动其他目录的折叠状态，仅展开其目录链 → 滚动到行并闪烁高亮
